@@ -49,32 +49,79 @@ def toCSVFile(file_name, isbnList):
     df.to_csv(file_name, mode='a', index=False, header=False, encoding='utf-8 ')
     return sg.popup('ISBN has been added to CSV File')
 
-initialLayout = [
-    [sg.Text('Enter ISBN', size=(15,1)), sg.InputText(key='-ISBN-')],
-    [sg.Button("Continue")]]
 
-initWindow = sg.Window("Test", initialLayout, finalize=True)
+
+def make_window(isbn):
+    layout_NewWindow = [
+        [sg.Text('ISBN: '), sg.Text(isbn)],
+        [sg.Text('Enter Quantity', size=(15, 1)), sg.InputText(key='-QUAN-')],
+        [sg.Text('Enter Condition', size=(15, 1)), sg.Button('New'), sg.Button('Like New'), sg.Button('Rebind')],
+        [sg.Text('Enter Pallet Number', size=(15, 1)), sg.InputText('PALLET ', key='-PALLET-')],
+        [sg.Text('Enter Lot Number', size=(15, 1)), sg.InputText('LOT ', key='-LOT-')],
+        [sg.Submit(), sg.Button('Back'), sg.Button('Display Inventory'), sg.Exit()] ]
+    return sg.Window('Inventory Details', layout_NewWindow)
+
+def make_init_window():
+    layout_new_init = [
+        [sg.Text('Enter ISBN', size=(15, 1)), sg.InputText(key='-ISBN-')],
+        [sg.Button("Continue"), sg.Button('Display Inventory')] ]
+    return sg.Window('Enter ISBN', layout_new_init)
+
+def make_multi_window():
+    layout_multi = [
+        [sg.Text('ISBN Already exists in CSV File')],
+        [sg.Text('Would you like to add it as a new entry or edit existing instance?')],
+        [sg.Button('Add New Entry'), sg.Button('Edit Existing Entry'), sg.Button('Display Inventory')],
+        [sg.Exit()] ]
+    return sg.Window('MultiTest', layout_multi)
 
 def enterISBN():
+    isbnEntered = False
+    initWindow = make_init_window()
     while True:
         initEvent, initValues = initWindow.read()
 
-        if initEvent == 'Continue':
-            isbn = initValues['-ISBN-']
-            return isbn
-        if initEvent == sg.WIN_CLOSED:
-            break
+        while not isbnEntered:
+            if initEvent == sg.WIN_CLOSED:
+                isbn = 'Exit'
+                initWindow.close()
+                return isbn
+            if initEvent == 'Display Inventory':
+                display_CSV()
+                break
+            if initEvent == 'Continue':
+                isbn = initValues['-ISBN-']
+                if isbn == '':
+                    sg.Popup('Please Enter an ISBN')
+                    break
+                else:
+                    initWindow.close()
+                    return isbn
 
-isbn = enterISBN()
-initWindow.Hide()
+def display_CSV():
+    sg.set_options(auto_size_buttons=True)
+    filename = 'test.csv'
+    data = []
+    header_list = []
 
-layout = [
-    [sg.Text('ISBN: '), sg.Text(isbn)],
-    [sg.Text('Enter Quantity', size=(15,1)), sg.InputText(key='-QUAN-')],
-    [sg.Text('Enter Condition', size=(15,1)), sg.Button('New'), sg.Button('Like New'), sg.Button('Rebind')],
-    [sg.Text('Enter Pallet Number', size=(15,1)), sg.InputText('PALLET ', key='-PALLET-')],
-    [sg.Text('Enter Lot Number', size=(15,1)), sg.InputText('LOT ', key='-LOT-')],
-    [sg.Submit(), sg.Button('Back'), sg.Exit()] ]
+    try:
+        df = pd.read_csv(filename, sep=',', engine='python', header=None)
+        header_list = df.iloc[0].tolist()
+        data = df[1:].values.tolist()
+    except:
+        sg.popup_error('Error Reading File')
+        return
+
+    displayLayout = [
+        [sg.Table(values=data, headings=header_list, display_row_numbers=True, auto_size_columns=False, num_rows=min(25, len(data)))]
+    ]
+    displayWindow = sg.Window('Table', displayLayout, grab_anywhere=False)
+    disEvent, disValues = displayWindow.read()
+    displayWindow.close()
+
+initialLayout = [
+    [sg.Text('Enter ISBN', size=(15,1)), sg.InputText(key='-ISBN-')],
+    [sg.Button("Continue")]]
 
 layoutWin2 = [
     [sg.Text('ISBN Already exists in CSV File')],
@@ -82,22 +129,28 @@ layoutWin2 = [
     [sg.Button('Add New Entry'), sg.Button('Edit Existing Entry')],
     [sg.Exit()] ]
 
-window = sg.Window("Test", layout)
 windowMultInst_active = False # Second window for checking for multiple instances of an entered ISBN
-
+condition = ' '
+isbn = enterISBN()
+window = make_window(isbn)
 while True:  # Loop for window to remain open
     isbnList = []
+    if isbn == 'Exit':
+        break
+
+
     event, values = window.read()
+
     if event in (sg.WIN_CLOSED, 'Exit'):  # same as event == "Exit" or event == sg.WIN_CLOSED:
+        window.close()
         break
 
     if event == 'Back':
-        initWindow.UnHide()
-        window.Hide()
+        window.close()
         isbn = enterISBN()
-        window[isbn].update(isbn)
-        initWindow.Hide()
-        window.UnHide()
+
+    if event == 'Display Inventory':
+        display_CSV()
 
     # If else statements for the condition buttons
     # Button colors changes based off of which condition is selected
@@ -106,18 +159,17 @@ while True:  # Loop for window to remain open
         window[event].update(button_color=('white','black'))
         window['Rebind'].update(button_color=('white', 'dark blue'))
         window['Like New'].update(button_color=('white', 'dark blue'))
-    elif event == 'Like New':
+    if event == 'Like New':
         condition = 'Like New'
         window[event].update(button_color=('white', 'black'))
         window['Rebind'].update(button_color=('white', 'dark blue'))
         window['New'].update(button_color=('white', 'dark blue'))
-    elif event == 'Rebind':
+    if event == 'Rebind':
         condition = 'Rebind'
         window[event].update(button_color=('white', 'black'))
         window['Like New'].update(button_color=('white', 'dark blue'))
         window['New'].update(button_color=('white', 'dark blue'))
-    else:
-        condition = "N/A"
+
 
     if event == 'Submit':
         pallet = values['-PALLET-']
@@ -130,7 +182,7 @@ while True:  # Loop for window to remain open
         if lot == 'LOT ':
             lot = '-'
 
-        if not isbnlib.notisbn(isbn, level='strict'): #Verify the ISB is valid
+        if not isbnlib.notisbn(isbn, level='strict'): #Verify the ISBN is valid
             metadataInfo = get_isbn_metadata(isbn)
             tupleToList = tupleData(isbn, metadataInfo, quantity, condition, pallet, lot)
             isbnList.append(tupleToList)
@@ -145,31 +197,36 @@ while True:  # Loop for window to remain open
 
             if alreadyExist:
                 windowMultInst_active = True
-                window.Hide()
-                windowMultInst = sg.Window('Test', layoutWin2)
+                window.close()
+                windowMultInst = make_multi_window()
                 while True:
                     event2, values2 = windowMultInst.Read()
                     if event2 == 'Add New Entry':
                         toCSVFile('test.csv', isbnList)
                         windowMultInst.Close()
                         windowMultInst_active = False
-                        window.UnHide()
+                        window = make_window(isbn)
+                        condition = ' '
                         break
                     #if event2 == 'Edit Existing Entry':
+
+                    if event2 == 'Display Inventory':
+                        display_CSV()
 
                     if event2 == sg.WIN_CLOSED or event2 == 'Exit':
                         windowMultInst.Close()
                         windowMultInst_active = False
-                        window.UnHide()
+                        window = make_window(isbn)
+                        condition = ' '
                         break
             else:
                 toCSVFile('test.csv', isbnList) #Convert into the CSV File
+                window.close()
+                window = make_window(isbn)
+                condition = ' '
         else:
             sg.Popup('Not a Valid ISBN')
-
-window.close()
-
-
+            window.close()
 
 '''
   Will rewrite this part later
