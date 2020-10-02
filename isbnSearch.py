@@ -237,14 +237,14 @@ def update_CSV(filename, toUpdate):
                     for col in "ABHIJK":
                         cell_name = "{}{}".format(col, rowN)
                         vals = currentSheet[cell_name].value
-                        print(vals)
+                        #print(vals)
                         listEdit.append(vals)
-                print(listEdit[1])
-
+                #print(listEdit[1])
+                #make_change_window(listEdit)
     return
 '''
-def make_change_window(choice):
-    layout_choice = [
+def make_change_window(listEdit):
+    layout_change = [
         []
     ]
 '''
