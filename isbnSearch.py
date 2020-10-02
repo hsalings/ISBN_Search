@@ -178,6 +178,7 @@ def update_CSV(filename, toUpdate):
     file = openpyxl.load_workbook(filename)
     sheets = file.sheetnames
     #For reference, toUpdate[0][1] is equivalent to the title in the list
+    listEdit = []
     rowNumber = ''
     isbn = False
     title = False
@@ -232,9 +233,13 @@ def update_CSV(filename, toUpdate):
                 lot = False
                 pall = False
 
-                for Q in range(1, currentSheet.max_row + 1):
-                    for col in rowNumber:
-                        print(currentSheet[cell_name].value)
+                for rowN in rowNumber:
+                    for col in "ABHIJK":
+                        cell_name = "{}{}".format(col, rowN)
+                        vals = currentSheet[cell_name].value
+                        print(vals)
+                        listEdit.append(vals)
+                print(listEdit[1])
 
     return
 '''
