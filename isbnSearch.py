@@ -172,12 +172,13 @@ def make_edit_window(toEdit):
             if valuesEdit['-LIST-']:
                 choice = valuesEdit['-LIST-']
                 update_CSV(filename, choice)
+                editWindow.Close()
     return
 
 def update_CSV(filename, toUpdate):
     file = openpyxl.load_workbook(filename)
     sheets = file.sheetnames
-    #For reference, toUpdate[0][1] is equivalent to the title in the list
+    #For reference, toUpdate[0][1] is equivalent to the title in the first list
     listEdit = []
     rowNumber = ''
     isbn = False
@@ -197,32 +198,23 @@ def update_CSV(filename, toUpdate):
                 #print("cell position {} has value {}".format(cell_name, currentSheet[cell_name].value))
                 if currentSheet[cell_name].value == toUpdate[0][0]:
                     isbn = True
-                    isbnOfEdit = cell_name
 
                 if currentSheet[cell_name].value == toUpdate[0][1]:
                     title = True
-                    titleOfEdit = cell_name
 
                 if currentSheet[cell_name].value == toUpdate[0][7]:
                     quan = True
-                    quanOfEdit = cell_name
 
                 if currentSheet[cell_name].value == toUpdate[0][8]:
                     cond = True
-                    condOfEdit = cell_name
 
                 if currentSheet[cell_name].value == toUpdate[0][9]:
                     lot = True
-                    lotOfEdit = cell_name
 
                 if currentSheet[cell_name].value == toUpdate[0][10]:
                     pall = True
-                    pallOfEdit = cell_name
 
             if isbn == True and title == True and quan == True and cond == True and lot == True and pall == True:
-                #print('test')
-                #print(cell_name)
-                #print(isbnOfEdit + ' ' + titleOfEdit + ' ' +  quanOfEdit + ' ' +  condOfEdit + ' ' +  lotOfEdit + ' ' + pallOfEdit)
                 rowNumber = cell_name[1]
 
                 # Set back to False since it is still looping through all instances in the file
@@ -237,17 +229,60 @@ def update_CSV(filename, toUpdate):
                     for col in "ABHIJK":
                         cell_name = "{}{}".format(col, rowN)
                         vals = currentSheet[cell_name].value
-                        #print(vals)
                         listEdit.append(vals)
-                #print(listEdit[1])
-                #make_change_window(listEdit)
+                print(listEdit)
+                make_change_window(filename, listEdit, rowNumber)
     return
-'''
-def make_change_window(listEdit):
-    layout_change = [
-        []
+
+def make_change_window(filename, listEdit, rowNumber):
+    col = [
+        [sg.Text('Current')],
+        [sg.Text('ISBN-13: '+listEdit[0])],
+        [sg.Text('Title: '+listEdit[1])],
+        [sg.Text('Quantity: '+listEdit[2])],
+        [sg.Text('Condition: '+listEdit[3])],
+        [sg.Text('Lot: '+listEdit[4])],
+        [sg.Text('Pallet: '+listEdit[5])]
     ]
-'''
+
+    editCol = [
+        [sg.Text('Edit')],
+        [sg.Text('ISBN-13: '+listEdit[0])],
+        [sg.Text('Title: '+listEdit[1])],
+        [sg.Text('Quantity: ', size=(9,1)), sg.InputText(listEdit[2], key='-QUAN-')],
+        [sg.Text('Condition: ', size=(9,1)), sg.InputText(listEdit[3], key='-COND-')],
+        [sg.Text('Lot: ', size=(9,1)), sg.InputText(listEdit[4], key='-LOT-')],
+        [sg.Text('Pallet: ', size=(9,1)), sg.InputText(listEdit[5], key='-PALL-')]
+    ]
+
+    layout_change = [
+        [sg.Column(col),
+         sg.VSeperator(),
+         sg.Column(editCol)],
+        [sg.Button('Submit'), sg.Button('Cancel')]
+    ]
+
+    windowChange = sg.Window('Edit', layout_change)
+    while True:
+        eventChange, valuesChange = windowChange.read()
+        if eventChange == sg.WIN_CLOSED or eventChange == 'Cancel':
+            break
+        if eventChange == 'Submit':
+            file = openpyxl.load_workbook(filename)
+            sheets = file.sheetnames
+            for sheet in sheets:
+                cs = file[sheet] #current sheet
+                cs.cell(row=int(rowNumber), column=8).value = valuesChange['-QUAN-']
+                cs.cell(row=int(rowNumber), column=9).value = valuesChange['-COND-']
+                cs.cell(row=int(rowNumber), column=10).value = valuesChange['-LOT-']
+                cs.cell(row=int(rowNumber), column=11).value = valuesChange['-PALL-']
+            file.save(filename)
+            sg.Popup('File Updated')
+            windowChange.close()
+
+    windowChange.close()
+
+    return
 
 def enterISBN(filename):
     isbnEntered = False
@@ -372,17 +407,6 @@ while True:  # Loop for window to remain open
                         if cell.value == isbn:
                             alreadyExist = True
                             toEdit.append(sheet.row_values(rowid, start_colx=0))
-            '''
-            with open(filename, 'rt') as f:
-                #reader = csv.reader(f, delimiter=',')
-                reader = xlrd.open_workbook(filename)
-                toEdit = []
-                for col in reader:
-                    for row in col:
-                        if row == isbn:
-                            alreadyExist = True
-                            toEdit.append(col)
-            '''
 
             if alreadyExist:
                 windowMultInst_active = True
@@ -400,14 +424,11 @@ while True:  # Loop for window to remain open
 
                     if event2 == 'Edit Existing Entry':
                         make_edit_window(toEdit)
-                        '''
-                        editWindow = make_edit_window(toEdit)
-                        while True:
-                            eventEdit, valuesEdit = editWindow.Read()
-                            if eventEdit == sg.WIN_CLOSED or eventEdit == 'Cancel':
-                                editWindow.Close()
-                                break
-                        '''
+                        windowMultInst.Close()
+                        windowMultInst_active = False
+                        window = make_window(isbn)
+                        condition = ' '
+
                     if event2 == 'Display Inventory':
                         display_CSV(filename)
 
