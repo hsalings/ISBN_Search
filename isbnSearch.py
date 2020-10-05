@@ -13,7 +13,8 @@ import PySimpleGUI as sg  # For the GUI
 import csv
 import xlrd
 import openpyxl
-from openpyxl.utils.dataframe import dataframe_to_rows
+import os
+import requests
 
 # Functions
 def tupleData(isbn, data, quan, cond, pallet, lot):
@@ -35,6 +36,7 @@ def tupleData(isbn, data, quan, cond, pallet, lot):
 def get_isbn_metadata(isbn):
     # Takes the ISBN and appends information from it into a list
     # isbn.meta() gives the metadata of the ISBN in a dictionary format
+    '''
     try:
         isbnMeta = isbnlib.meta(str(isbn), service='wiki') # Grabs metadata of ISBN
 
@@ -45,6 +47,49 @@ def get_isbn_metadata(isbn):
         isbnMeta = isbnlib.meta(str(isbn), service='goob')
 
         return isbnMeta
+    '''
+    googleapikey = "AIzaSyBWCHj8ZfJ6hXr_UgPdXr67lHkt6hUg2Ks"
+    isbnMeta = []
+    parms = {"q": isbn, 'key': googleapikey}
+    r = requests.get(url="https://www.googleapis.com/books/v1/volumes", params=parms)
+    print(r.url)
+    rj = r.json()
+    print(rj["totalItems"])
+    for i in rj["items"]:
+        try:
+            print(repr(i["volumeInfo"]["description"]))
+        except:
+            pass
+        try:
+            print(repr(i["volumeInfo"]["imageLinks"]["thumbnail"]))
+        except:
+            pass
+
+
+    '''
+    try:
+        isbnMeta.append(isbnlib.meta(str(isbn), service='wiki'))
+        isbnMeta.append(isbnlib.meta(str(isbn), service='goob'))
+        isbnMeta.append(isbnlib.meta(str(isbn), service='openl'))
+    except:
+        try:
+            isbnMeta.append(isbnlib.meta(str(isbn), service='goob'))
+            isbnMeta.append(isbnlib.meta(str(isbn), service='openl'))
+        except:
+            isbnMeta.append(isbnlib.meta(str(isbn), service='goob'))
+
+    '''
+    #AIzaSyBWCHj8ZfJ6hXr_UgPdXr67lHkt6hUg2Ks
+    layout_isbn = [
+    [sg.Listbox(values=isbnMeta, size=(130, 6), key='-LIST-', bind_return_key=True)]
+    ]
+
+    window_isbn = sg.Window('ISBN', layout_isbn)
+    while True:
+        eventISBN, valuesISBN = window_isbn.Read()
+        if eventISBN == sg.WIN_CLOSED:
+            window_isbn.Close()
+            break
 
 
 def append_df_to_excel(filename, df, sheet_name='Sheet1', startrow=None,
@@ -143,7 +188,7 @@ def make_window(isbn): #Layouts cannot be re-used; must create a new window with
 def make_init_window():
     layout_new_init = [
         [sg.Text('Enter ISBN', size=(15, 1)), sg.InputText(key='-ISBN-')],
-        [sg.Button("Continue"), sg.Button('Display Inventory'), sg.Button('Change File Location'),sg.Button('Exit')] ]
+        [sg.Button("Continue"), sg.Button('Edit Existing Entry'), sg.Button('Display Inventory'),sg.Button('Exit')] ]
     return sg.Window('Enter ISBN', layout_new_init)
 
 def make_multi_window():
@@ -174,6 +219,29 @@ def make_edit_window(toEdit):
                 update_CSV(filename, choice)
                 editWindow.Close()
     return
+
+def already_exist_check(filename, isbn):
+    alreadyExist = False
+    book = xlrd.open_workbook(filename)
+    for sheet in book.sheets():
+        for rowid in range(sheet.nrows):
+            row = sheet.row(rowid)
+            for colid, cell in enumerate(row):
+                if cell.value == isbn:
+                    alreadyExist = True
+                    toEdit.append(sheet.row_values(rowid, start_colx=0))
+    return alreadyExist
+
+def find_existing_ISBN(filename, isbn):
+    toEdit = []
+    book = xlrd.open_workbook(filename)
+    for sheet in book.sheets():
+        for rowid in range(sheet.nrows):
+            row = sheet.row(rowid)
+            for colid, cell in enumerate(row):
+                if cell.value == isbn:
+                    toEdit.append(sheet.row_values(rowid, start_colx=0))
+    return toEdit
 
 def update_CSV(filename, toUpdate):
     file = openpyxl.load_workbook(filename)
@@ -299,8 +367,19 @@ def enterISBN(filename):
                 display_CSV(filename)
                 break
 
-            if initEvent == 'Change File Location':
-                break
+            if initEvent == 'Edit Existing Entry':
+                toEdit = []
+                isbn = initValues['-ISBN-']
+                toEdit = find_existing_ISBN(filename, isbn)
+                if isbn == '':
+                    sg.Popup('Please Enter an ISBN')
+                    break
+                elif toEdit == []:
+                    sg.Popup('No Existing Entries of this ISBN')
+                    break
+                else:
+                    make_edit_window(toEdit)
+                    break
 
             if initEvent == 'Continue':
                 isbn = initValues['-ISBN-']
@@ -332,7 +411,7 @@ def display_CSV(filename):
     disEvent, disValues = displayWindow.read()
     displayWindow.close()
 
-windowMultInst_active = False # Second window for checking for multiple instances of an entered ISBN
+windowMultInst_active = False #Second window for checking for multiple instances of an entered ISBN
 condition = '-'
 filename = 'test.xlsx'
 
@@ -394,12 +473,15 @@ while True:  # Loop for window to remain open
             metadataInfo = get_isbn_metadata(isbn)
             tupleToList = tupleData(isbn, metadataInfo, quantity, condition, pallet, lot)
             isbnList.append(tupleToList)
+            toEdit = []
+            #alreadyExist = False # For testing if the ISBN is already in the CSV file
 
-            alreadyExist = False # For testing if the ISBN is already in the CSV file
+            alreadyExist = already_exist_check(filename, isbn)
+            toEdit = find_existing_ISBN(filename, isbn)
 
+            '''
             book = xlrd.open_workbook(filename)
             toEdit = []
-            test = []
             for sheet in book.sheets():
                 for rowid in range(sheet.nrows):
                     row = sheet.row(rowid)
@@ -407,6 +489,7 @@ while True:  # Loop for window to remain open
                         if cell.value == isbn:
                             alreadyExist = True
                             toEdit.append(sheet.row_values(rowid, start_colx=0))
+            '''
 
             if alreadyExist:
                 windowMultInst_active = True
