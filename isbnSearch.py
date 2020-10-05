@@ -10,11 +10,8 @@ Host file on server
 import isbnlib  # For searching ISBNs
 import pandas as pd  # For the dataframe to convert to .CSV
 import PySimpleGUI as sg  # For the GUI
-import csv
 import xlrd
 import openpyxl
-import os
-import requests
 
 # Functions
 def tupleData(isbn, data, quan, cond, pallet, lot):
@@ -36,6 +33,7 @@ def tupleData(isbn, data, quan, cond, pallet, lot):
 def get_isbn_metadata(isbn):
     # Takes the ISBN and appends information from it into a list
     # isbn.meta() gives the metadata of the ISBN in a dictionary format
+
     '''
     try:
         isbnMeta = isbnlib.meta(str(isbn), service='wiki') # Grabs metadata of ISBN
@@ -48,49 +46,46 @@ def get_isbn_metadata(isbn):
 
         return isbnMeta
     '''
-    googleapikey = "AIzaSyBWCHj8ZfJ6hXr_UgPdXr67lHkt6hUg2Ks"
-    isbnMeta = []
-    parms = {"q": isbn, 'key': googleapikey}
-    r = requests.get(url="https://www.googleapis.com/books/v1/volumes", params=parms)
-    print(r.url)
-    rj = r.json()
-    print(rj["totalItems"])
-    for i in rj["items"]:
-        try:
-            print(repr(i["volumeInfo"]["description"]))
-        except:
-            pass
-        try:
-            print(repr(i["volumeInfo"]["imageLinks"]["thumbnail"]))
-        except:
-            pass
+    isbnMetaList = []
 
-
-    '''
     try:
-        isbnMeta.append(isbnlib.meta(str(isbn), service='wiki'))
-        isbnMeta.append(isbnlib.meta(str(isbn), service='goob'))
-        isbnMeta.append(isbnlib.meta(str(isbn), service='openl'))
+        isbnMeta = isbnlib.meta(str(isbn), service='wiki')
+        if bool(isbnMeta):  # Check to make sure it does not return an empty dictionary
+            isbnMetaList.append(isbnMeta)
     except:
-        try:
-            isbnMeta.append(isbnlib.meta(str(isbn), service='goob'))
-            isbnMeta.append(isbnlib.meta(str(isbn), service='openl'))
-        except:
-            isbnMeta.append(isbnlib.meta(str(isbn), service='goob'))
+        pass
+    try:
+        isbnMeta = isbnlib.meta(str(isbn), service='goob')
+        if bool(isbnMeta):
+            isbnMetaList.append(isbnMeta)
+    except:
+        pass
+    try:
+        isbnMeta = isbnlib.meta(str(isbn), service='openl')
+        if bool(isbnMeta):
+            isbnMetaList.append(isbnMeta)
+    except:
+        pass
 
-    '''
-    #AIzaSyBWCHj8ZfJ6hXr_UgPdXr67lHkt6hUg2Ks
-    layout_isbn = [
-    [sg.Listbox(values=isbnMeta, size=(130, 6), key='-LIST-', bind_return_key=True)]
+    layout = [
+        [sg.Text("Results From Searching Wiki Books, Google Books, and OpenLibrary")],
+        [sg.Text("The selection from this page will input the data for the book")],
+        [sg.Listbox(values=isbnMetaList, size=(200, 6), key='-BOOK-', bind_return_key=True)],
+        [sg.Button('Submit'), sg.Button('Cancel')]
     ]
 
-    window_isbn = sg.Window('ISBN', layout_isbn)
+    isbnMetaWindow = sg.Window('Select the Book', layout=layout)
     while True:
-        eventISBN, valuesISBN = window_isbn.Read()
-        if eventISBN == sg.WIN_CLOSED:
-            window_isbn.Close()
-            break
-
+        eventISBNMeta, valuesISBNMeta = isbnMetaWindow.Read()
+        if eventISBNMeta == sg.WIN_CLOSED or eventISBNMeta == 'Cancel':
+            book = 'cancel'
+            isbnMetaWindow.Close()
+            return book
+        if eventISBNMeta == 'Submit':
+            if valuesISBNMeta['-BOOK-']:
+                book = valuesISBNMeta['-BOOK-']
+                isbnMetaWindow.Close()
+                return book
 
 def append_df_to_excel(filename, df, sheet_name='Sheet1', startrow=None,
                        truncate_sheet=False,
@@ -169,8 +164,6 @@ def append_df_to_excel(filename, df, sheet_name='Sheet1', startrow=None,
 def toCSVFile(filename, isbnList):
     # Convert the list into a CSV file format
     df = pd.DataFrame(isbnList)
-    #df.to_csv(filename, mode='a', index=False, header=False, encoding='utf-8 ')
-
     append_df_to_excel(filename, df)
 
     return sg.popup('ISBN has been added to Inventory File')
@@ -203,7 +196,7 @@ def make_edit_window(toEdit):
     layout_edit = [
         [sg.Text('Locations of ISBN in Inventory:')],
         [sg.Text('Select which item to edit')],
-        [sg.Listbox(values=toEdit, size=(130,6), key='-LIST-', bind_return_key=True)],
+        [sg.Listbox(values=toEdit, size=(175,6), key='-LIST-', bind_return_key=True)],
         [sg.Button('Submit'), sg.Button('Cancel')]
     ]
 
@@ -249,17 +242,17 @@ def update_CSV(filename, toUpdate):
     #For reference, toUpdate[0][1] is equivalent to the title in the first list
     listEdit = []
     rowNumber = ''
-    isbn = False
-    title = False
-    quan = False
-    cond = False
-    lot = False
-    pall = False
 
     for sheet in sheets:
         currentSheet = file[sheet]
 
         for row in range(1, currentSheet.max_row + 1):
+            isbn = False
+            title = False
+            quan = False
+            cond = False
+            lot = False
+            pall = False
             for column in "ABCDEFGHIJK":
 
                 cell_name = "{}{}".format(column, row)
@@ -283,7 +276,7 @@ def update_CSV(filename, toUpdate):
                     pall = True
 
             if isbn == True and title == True and quan == True and cond == True and lot == True and pall == True:
-                rowNumber = cell_name[1]
+                rowNumber = cell_name[1:]
 
                 # Set back to False since it is still looping through all instances in the file
                 isbn = False
@@ -293,12 +286,10 @@ def update_CSV(filename, toUpdate):
                 lot = False
                 pall = False
 
-                for rowN in rowNumber:
-                    for col in "ABHIJK":
-                        cell_name = "{}{}".format(col, rowN)
-                        vals = currentSheet[cell_name].value
-                        listEdit.append(vals)
-                print(listEdit)
+                for col in "ABHIJK":
+                    cell_name = "{}{}".format(col, rowNumber)
+                    vals = currentSheet[cell_name].value
+                    listEdit.append(vals)
                 make_change_window(filename, listEdit, rowNumber)
     return
 
@@ -386,9 +377,13 @@ def enterISBN(filename):
                 if isbn == '':
                     sg.Popup('Please Enter an ISBN')
                     break
-                else:
+                if not isbnlib.notisbn(isbn, level='strict'):  # Verify the ISBN is valid
                     initWindow.close()
                     return isbn
+                else:
+                    sg.Popup("Invalid ISBN")
+                    break
+
 
 def display_CSV(filename):
     sg.set_options(auto_size_buttons=True)
@@ -470,62 +465,52 @@ while True:  # Loop for window to remain open
             quantity = '-'
 
         if not isbnlib.notisbn(isbn, level='strict'): #Verify the ISBN is valid
+            selection = True
             metadataInfo = get_isbn_metadata(isbn)
-            tupleToList = tupleData(isbn, metadataInfo, quantity, condition, pallet, lot)
-            isbnList.append(tupleToList)
-            toEdit = []
-            #alreadyExist = False # For testing if the ISBN is already in the CSV file
+            if metadataInfo == 'cancel':
+                selection = False
+            if selection:
+                tupleToList = tupleData(isbn, metadataInfo[0], quantity, condition, pallet, lot)
+                isbnList.append(tupleToList)
+                toEdit = []
+                alreadyExist = already_exist_check(filename, isbn)
+                toEdit = find_existing_ISBN(filename, isbn)
 
-            alreadyExist = already_exist_check(filename, isbn)
-            toEdit = find_existing_ISBN(filename, isbn)
+                if alreadyExist:
+                    windowMultInst_active = True
+                    window.close()
+                    windowMultInst = make_multi_window()
+                    while True:
+                        event2, values2 = windowMultInst.Read()
+                        if event2 == 'Add New Entry':
+                            toCSVFile(filename, isbnList)
+                            windowMultInst.Close()
+                            windowMultInst_active = False
+                            window = make_window(isbn)
+                            condition = ' '
+                            break
 
-            '''
-            book = xlrd.open_workbook(filename)
-            toEdit = []
-            for sheet in book.sheets():
-                for rowid in range(sheet.nrows):
-                    row = sheet.row(rowid)
-                    for colid, cell in enumerate(row):
-                        if cell.value == isbn:
-                            alreadyExist = True
-                            toEdit.append(sheet.row_values(rowid, start_colx=0))
-            '''
+                        if event2 == 'Edit Existing Entry':
+                            make_edit_window(toEdit)
+                            windowMultInst.Close()
+                            windowMultInst_active = False
+                            window = make_window(isbn)
+                            condition = ' '
 
-            if alreadyExist:
-                windowMultInst_active = True
-                window.close()
-                windowMultInst = make_multi_window()
-                while True:
-                    event2, values2 = windowMultInst.Read()
-                    if event2 == 'Add New Entry':
-                        toCSVFile(filename, isbnList)
-                        windowMultInst.Close()
-                        windowMultInst_active = False
-                        window = make_window(isbn)
-                        condition = ' '
-                        break
+                        if event2 == 'Display Inventory':
+                            display_CSV(filename)
 
-                    if event2 == 'Edit Existing Entry':
-                        make_edit_window(toEdit)
-                        windowMultInst.Close()
-                        windowMultInst_active = False
-                        window = make_window(isbn)
-                        condition = ' '
-
-                    if event2 == 'Display Inventory':
-                        display_CSV(filename)
-
-                    if event2 == sg.WIN_CLOSED or event2 == 'Exit':
-                        windowMultInst.Close()
-                        windowMultInst_active = False
-                        window = make_window(isbn)
-                        condition = ' '
-                        break
-            else:
-                toCSVFile(filename, isbnList) #Convert into the CSV File
-                window.close()
-                window = make_window(isbn)
-                condition = ' '
+                        if event2 == sg.WIN_CLOSED or event2 == 'Exit':
+                            windowMultInst.Close()
+                            windowMultInst_active = False
+                            window = make_window(isbn)
+                            condition = ' '
+                            break
+                else:
+                    toCSVFile(filename, isbnList) #Convert into the CSV File
+                    window.close()
+                    window = make_window(isbn)
+                    condition = ' '
         else:
             sg.Popup('Not a Valid ISBN')
 
